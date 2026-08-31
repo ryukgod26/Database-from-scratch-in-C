@@ -56,7 +56,9 @@ typedef struct
 
 #define LEAF_NODE_NUM_CELLS_SIZE  sizeof(uint32_t)
 #define LEAF_NODE_NUM_CELLS_OFFSET  COMMON_NODE_HEADER_SIZE
-#define LEAF_NODE_HEADER_SIZE  (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_MODE_NEXT_LEAF_SIZE sizeof(uint32_t)
+#define LEAF_NODE_NEXT_LEAF_OFFSET (LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_NODE_HEADER_SIZE  (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE)
 
 
 //LEAF NODE BODY LAYOUT
@@ -187,12 +189,17 @@ uint32_t* leaf_node_key(void* node, uint32_t cell_num){
     return leaf_node_cell(node,cell_num);
 }
 
-void* leaf_node_value(void* node, uint32_t cell_num){
+void* leaf_node_value(void* node, uint32_t cell_numf){
     return leaf_node_cell(node,cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+uint32_t* leaf_node_next_leaf(void* node){
+return node + LEAF_NODE_NEXT_LEAF_OFFSET;
 }
 
 void intialize_leaf_node(void* node){
     *leaf_node_num_cells(node) = 0;
+    *leaf_node_next_leaf(node) = 0;
     set_node_type(node,NodeLeaf);
     set_node_root(node,false);
 }
@@ -202,6 +209,7 @@ void close_input_buffer(InputBuffer* inputBuffer){
     free(inputBuffer->buffer);
     free(inputBuffer);
 }
+
 
 //Functions for Internal Node
 
@@ -324,8 +332,15 @@ void* get_page(Pager* pager, uint32_t page_num){
 
     // return pager->pages[page_num];
     
+
 }
 
+
+
+//It is commnetwd out becasue It only works when our root node is a Leaf Node 
+//when splitting happens an da Internal Node becomes the root node.
+//This function return the cell 0 of root node (Internal ) whixh does not contain any rows and it displays wrobg Info 
+/*
 Cursor* table_start(Table* table){
 Cursor* cursor = malloc(sizeof(Cursor));
 
@@ -338,6 +353,18 @@ uint32_t num_cells = *leaf_node_num_cells(root_node);
 cursor->end_of_table = (num_cells==0);
 
 
+
+return cursor;
+
+}
+*/
+
+Cursor* table_start(Table* table){
+Cursor* cursor = table_find(table,0);
+
+void* node = get_page(table->pager,cursor->page_num);
+uint32_t num_cells = *leaf_node_num_cells(node);
+cursor->end_of_table = (num_cells == 0);
 
 return cursor;
 
@@ -375,6 +402,40 @@ Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key){
 }
 
 
+
+
+Cursor* internal_node_find(Table* table,uint32_t page_num,uint32_t key){
+void* node  = get_page(table->pager,page_num);
+uint32_t num_keys = *internal_node_num_keys(node);
+
+//Using Binary Search to find the Index of yhe Child to Search
+uint32_t min_index = 0;
+uint32_t max_index = num_keys; //Because Yhere is One more Child Then Key
+
+while(min_index != max_index){
+uint32_t index = (min_index+max_index)/2;
+uint32_t key_to_right = *internal_node_key(node,index);
+if(key_to_right >= key){
+max_index = index;
+}
+else{
+min_index = index+1;
+}
+}
+uint32_t child_num = *internal_node_child(node,min_index);
+void* child = get_page(table->pager,child_num);
+switch(get_node_type(child)){
+	case NodeLeaf:
+		return leaf_node_find(table,child_num,key);
+		break;
+	case NodeInternal:
+		return internal_node_find(table,child_num,key);
+		break;
+}
+
+
+}
+
 //return the Position of a given Key.
 //If the Key is not Present then return the location where key should be inserted
 Cursor* table_find(Table* table,uint32_t key){
@@ -385,8 +446,9 @@ Cursor* table_find(Table* table,uint32_t key){
         return leaf_node_find(table,root_page_num,key);
     }
     else{
-        printf("Searching for Internal Node is not Implemented Yet.");
-        exit(EXIT_FAILURE);
+//        printf("Searching for Internal Node is not Implemented Yet.");
+  //      exit(EXIT_FAILURE);
+	  return internal_node_find(table,root_page_num,key);
     }
 
 }
@@ -419,7 +481,18 @@ void* node = get_page(cursor->table->pager,page_num);
 cursor->cell_num +=1;
 
 if(cursor->cell_num >= (*leaf_node_num_cells(node))){
+//cursor->end_of_table = true;
+//Advance to the next leaf node 
+
+uint32_t next_page_num = *leaf_node_next_leaf(node);
+if(next_page_num == 0){
+//This is the last leaf node.
 cursor->end_of_table = true;
+}
+else{
+cursor->page_num = next_page_num;
+cursor->cell_num = 0;
+}
 
 }
 
@@ -661,6 +734,9 @@ intialize_leaf_node(new_node);
 
 *(leaf_node_num_cells(old_node)) = LEAF_NODE_LEFT_SPLIT_COUNT;
 *(leaf_node_num_cells(new_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
+
+*leaf_node_next_leaf(new_node) = *leaf_node_next_leaf(old_node);
+*leaf_node_next_leaf(old_node) = new_page_num;
 
 if(is_node_root(old_node)){
     create_new_root(cursor->table,new_page_num);
