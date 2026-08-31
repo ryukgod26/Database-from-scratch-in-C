@@ -64,6 +64,11 @@ typedef enum {
     STATEMENT_INSERT
 } StatementType;
 
+typedef enum{
+    EXECUTE_SUCCESS,
+    EXECUTE_FAILURE,
+    EXECUTE_TABLE_FULL
+} ExecuteResult;
 
 
 
@@ -135,8 +140,7 @@ PrepareResult prepare_statement(InputBuffer* inputBuffer , Statement* statement)
     }
         return PREPARE_SUCCESS;
     }
-
-    if(strncmp(inputBuffer->buffer,"select",6) == 0){
+   if(strncmp(inputBuffer->buffer,"select",6) == 0){
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
@@ -145,18 +149,6 @@ PrepareResult prepare_statement(InputBuffer* inputBuffer , Statement* statement)
 
 }
 
-void execute_statement(Statement* statement){
-    switch (statement->type)
-    {
-    case (STATEMENT_INSERT):
-        printf("This is an Insert Statement\n");
-        break;
-    
-    case (STATEMENT_SELECT):
-        printf("This is an Select Statement.\n");
-        break;
-    }
-}
 
 void serialize_row(Row* source, void* destination){
     //copying the value of id at the location dest+IDOffset of id size to store th buffer in memoery as a struct
@@ -170,5 +162,69 @@ void deserialize_row(void* source, Row* destination){
     memcpy(&(destination->id),source + ID_OFFSET, ID_SIZE);
     memcpy(&(destination->username), source + USERNAME_OFFSET , USERNAME_SIZE);
     memcpy(&(destination->email),source + EMAIL_OFFSET,EMAIL_SIZE);
+}
 
+void* row_slot(Table* table,uint32_t row_num){
+    uint32_t page_num = row_num / ROWS_PER_PAGE;
+    void* page =  table->pages[page_num]; 
+
+    if(page==NULL){
+        //Allocating Memory only when we try to access page
+        page = table->pages[page_num] =malloc(PAGE_SIZE);
+    }
+    uint32_t row_offset = row_num % ROWS_PER_PAGE;
+    uint32_t byte_offset = row_offset * ROW_SIZE;
+    return page + byte_offset;
+}
+
+
+ExecuteResult execute_insert(Statement* statement, Table* table){
+    if(table->pages >= TABLE_MAX_PAGES){
+        return EXECUTE_TABLE_FULL;
+    }
+
+    Row* row_to_insert = &(statement->row_to_insert);
+    serialize_row(row_to_insert,row_slot(table,table->num_rows));
+    table->num_rows += 1;
+
+    return EXECUTE_SUCCESS;
+}
+
+
+ExecuteResult execute_select(Statement* statement, Table* table){
+    Row row;
+    for(uint32_t i=0; i<table->num_rows;i++){
+        deserialize_row(row_slot(table,i),&row);
+        print_row(&row);
+    }
+
+    return EXECUTE_SUCCESS;
+
+}
+
+ExecuteResult execute_statement(Statement* statement,Table* table){
+    switch (statement->type)
+    {
+    case (STATEMENT_INSERT):
+        return execute_insert(statement,table);
+    
+    case (STATEMENT_SELECT):
+        return execute_select(statement,table);
+    }
+}
+
+Table* new_table(){
+    Table* table = (Table*) malloc(sizeof(Table));
+    table->num_rows =0;
+    for(uint32_t i=0; i<TABLE_MAX_PAGES;i++){
+        table->pages[i] = NULL;
+    }
+    return table;
+}
+
+void free_table(Table* table){
+    for(int i =0; i< table->pages[i]; i++){
+        free(table->pages[i]);
+    }
+    free(table);
 }
