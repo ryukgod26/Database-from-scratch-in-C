@@ -1,4 +1,12 @@
-# Database From Scratch in C
+<p align="center">
+  <img src="assets/banner.png" alt="Database From Scratch in C" width="100%">
+</p>
+
+<h1 align="center">Database From Scratch in C</h1>
+
+<p align="center">
+  A lightweight database engine built from scratch in C.
+</p>
 
 A lightweight database engine built **from scratch in C**, with the goal of understanding how database systems work internally.
 
