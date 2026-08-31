@@ -10,6 +10,7 @@
 #include<fcntl.h>
 #include<unistd.h>
 #include<sys/stat.h>
+#include<errno.h>
 
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
@@ -189,8 +190,8 @@ printf("id:%d ,Username:%s, Email:%s \n",row->id,row->username,row->email);
 void serialize_row(Row* source, void* destination){
     //copying the value of id at the location dest+IDOffset of id size to store th buffer in memoery as a struct
     memcpy(destination + ID_OFFSET, &(source->id),ID_SIZE);
-    memcpy(destination + USERNAME_OFFSET,&(source->username),USERNAME_SIZE);
-    memcpy(destination + EMAIL_OFFSET,&(source->email),EMAIL_SIZE);
+    strncpy(destination + USERNAME_OFFSET,source->username,USERNAME_SIZE);
+    strncpy(destination + EMAIL_OFFSET,source->email,EMAIL_SIZE);
 }
 
 void deserialize_row(void* source, Row* destination){
@@ -303,7 +304,7 @@ void db_close(Table* table){
     free(pager);
     free(table);
 
-    printf("Database Closed Successfully.");
+    printf("Database Closed Successfully.\n");
 
 }
 
