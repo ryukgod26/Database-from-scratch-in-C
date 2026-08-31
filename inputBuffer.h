@@ -279,7 +279,17 @@ uint32_t internal_node_find_child(void* node, uint32_t key){
     uint32_t min_index = 0;
     uint32_t max_index = num_keys;
     while (min_index != max_index){
-        
+uint32_t    index = (min_index + max_index)/2;	    
+if (index >= key){
+
+min _index = index + 1;
+
+}
+else{
+max_index = index;
+
+}
+
     }
 }
 
