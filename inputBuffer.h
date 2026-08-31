@@ -266,8 +266,21 @@ uint32_t get_node_max_key(void* node){
 
 
 //Funxtion to get the reference parent node of a node from the parent node offset
-uint32_t* parent_node(void* node){
+uint32_t* node_parent(void* node){
 return node + PARENT_POINTER_OFFSET;
+}
+
+uint32_t internal_node_find_child(void* node, uint32_t key){
+    // return the index of the child which should return the given key
+
+    uint32_t num_keys = *internal_node_num_keys(node);
+
+    //Binary Search
+    uint32_t min_index = 0;
+    uint32_t max_index = num_keys;
+    while (min_index != max_index){
+        
+    }
 }
 
 //Function to update internal node key
@@ -403,37 +416,37 @@ Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key){
 }
 
 
-Cursor* internal_node_find(Table* table,uint32_t page_num,uint32_t key){
-void* node  = get_page(table->pager,page_num);
-uint32_t num_keys = *internal_node_num_keys(node);
+// Cursor* internal_node_find(Table* table,uint32_t page_num,uint32_t key){
+// void* node  = get_page(table->pager,page_num);
+// uint32_t num_keys = *internal_node_num_keys(node);
 
-//Using Binary Search to find the Index of yhe Child to Search
-uint32_t min_index = 0;
-uint32_t max_index = num_keys; //Because Yhere is One more Child Then Key
+// //Using Binary Search to find the Index of yhe Child to Search
+// uint32_t min_index = 0;
+// uint32_t max_index = num_keys; //Because Yhere is One more Child Then Key
 
-while(min_index != max_index){
-uint32_t index = (min_index+max_index)/2;
-uint32_t key_to_right = *internal_node_key(node,index);
-if(key_to_right >= key){
-max_index = index;
-}
-else{
-min_index = index+1;
-}
-}
-uint32_t child_num = *internal_node_child(node,min_index);
-void* child = get_page(table->pager,child_num);
-switch(get_node_type(child)){
-	case NodeLeaf:
-		return leaf_node_find(table,child_num,key);
-		break;
-	case NodeInternal:
-		return internal_node_find(table,child_num,key);
-		break;
-}
+// while(min_index != max_index){
+// uint32_t index = (min_index+max_index)/2;
+// uint32_t key_to_right = *internal_node_key(node,index);
+// if(key_to_right >= key){
+// max_index = index;
+// }
+// else{
+// min_index = index+1;
+// }
+// }
+// uint32_t child_num = *internal_node_child(node,min_index);
+// void* child = get_page(table->pager,child_num);
+// switch(get_node_type(child)){
+// 	case NodeLeaf:
+// 		return leaf_node_find(table,child_num,key);
+// 		break;
+// 	case NodeInternal:
+// 		return internal_node_find(table,child_num,key);
+// 		break;
+// }
 
 
-}
+// }
 
 
 //return the Position of a given Key.
@@ -720,12 +733,12 @@ void leaf_node_split_and_insert(Cursor* cursor, uint32_t key, Row* value){
 //Creating a new node and moving half the cells over. Insert the new values in one of two nodes. Updating Parent or creating a new Parent.
 
 void* old_node = get_page(cursor->table->pager,cursor->page_num);
-uint32_t old_max = get_node_max_key(node);
+uint32_t old_max = get_node_max_key(old_node);
 uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
-*node_parent(new_node) = *node_parent(old_node);
+
 
 void* new_node = get_page(cursor->table->pager,new_page_num);
-
+*node_parent(new_node) = *node_parent(old_node);
 intialize_leaf_node(new_node);
 
 //Dividing all the old keys and the new key evenly between the old node and new node.
