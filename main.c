@@ -27,22 +27,31 @@ case PREPARE_SUCCESS:
     
     break;
 case PREPARE_SYNTAX_ERROR:
-    printf("Syntax error. Could Not Parse the Statement.");
+    printf("Syntax error. Could Not Parse the Statement.\n");
     continue;
 
 case PREPARE_UNRECOGNISED_COMMAND:
     printf("Unrecognised Keyword at the start  %s \n",input->buffer);
     continue;
+
+case PREPARE_STRING_TOO_LONG:
+    printf("String is too long!!!\n");
+    continue;
+
+case PREPARE_NEGATIVE_ID:
+    printf("ID Cannot Be Negative.\n");
+    continue;
+    
 }
 
 switch (execute_statement(&statement,table))
 {
 case EXECUTE_SUCCESS:
-    printf("EXECUTED SUCCEFULLY.");
+    printf("\nEXECUTED SUCCEFULLY.\n");fflush(stdout);
     break;
 
 case EXECUTE_TABLE_FULL:
-    printf("TABLE IS FULL");
+    printf("\nTABLE IS FULL\n");
     break;
 }
 
@@ -62,3 +71,4 @@ case EXECUTE_TABLE_FULL:
 
 return 0;
 }
+
