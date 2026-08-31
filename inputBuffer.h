@@ -265,6 +265,19 @@ uint32_t get_node_max_key(void* node){
 }
 
 
+//Funxtion to get the reference parent node of a node from the parent node offset
+uint32_t* parent_node(void* node){
+return node + PARENT_POINTER_OFFSET;
+}
+
+//Function to update internal node key
+void update_internal_node_key(void* node, uint32_t old_key, uint32_t new_key){
+uint32_t old_child_index = internal_node_find_child(node, old_key);
+*internal_node_key(node,old_child_index) = new_key;
+
+}
+
+
 
 InputBuffer* get_input_buffer(){
 InputBuffer* inputBuffer = (InputBuffer*) malloc(sizeof(InputBuffer));
@@ -687,6 +700,9 @@ void create_new_root(Table* table,uint32_t right_child_page_num){
     uint32_t left_child_max_keys = get_node_max_key(left_child);
     *internal_node_key(root,0) = left_child_max_keys;
     *internal_node_right_child(root) = right_child_page_num;
+
+    *node_parent(left_child) = table->root_page_num;
+    *node_parent(right_child) = table->root_page_num;
 }
 
 void* cursor_value(Cursor* cursor){
@@ -704,7 +720,10 @@ void leaf_node_split_and_insert(Cursor* cursor, uint32_t key, Row* value){
 //Creating a new node and moving half the cells over. Insert the new values in one of two nodes. Updating Parent or creating a new Parent.
 
 void* old_node = get_page(cursor->table->pager,cursor->page_num);
+uint32_t old_max = get_node_max_key(node);
 uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
+*node_parent(new_node) = *node_parent(old_node);
+
 void* new_node = get_page(cursor->table->pager,new_page_num);
 
 intialize_leaf_node(new_node);
@@ -748,8 +767,15 @@ if(is_node_root(old_node)){
     create_new_root(cursor->table,new_page_num);
 }
 else{
-    printf("YET to Implement Updating Parent AFter Splitting");
-    exit(EXIT_FAILURE);
+//    printf("YET to Implement Updating Parent AFter Splitting");
+  //  exit(EXIT_FAILURE);
+  uint32_t parent_page_num = *node_parent(old_node);
+  uint32_t new_max = get_node_max_key(new_node);
+  void* parent = get_page(cursor->table->pager,parent_page_num);
+
+  update_internal_node_key(parent,old_max,new_max);
+  internal_node_insert(cursor->table,parent_page_num,new_page_num);
+  return ;
 }
 
 
