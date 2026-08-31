@@ -187,7 +187,7 @@ uint32_t* leaf_node_key(void* node, uint32_t cell_num){
     return leaf_node_cell(node,cell_num);
 }
 
-void* leaf_node_value(void* node, uint32_t cell_numf){
+void* leaf_node_value(void* node, uint32_t cell_num){
     return leaf_node_cell(node,cell_num) + LEAF_NODE_KEY_SIZE;
 }
 
