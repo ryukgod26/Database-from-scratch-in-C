@@ -7,6 +7,9 @@
 #include<stdlib.h>
 #include<string.h>
 #include<stdbool.h>
+#include<fcntl.h>
+#include<unistd.h>
+#include<sys/stat.h>
 
 #define COLUMN_USERNAME_SIZE 32
 #define COLUMN_EMAIL_SIZE 255
@@ -20,6 +23,8 @@ typedef struct
     char email[COLUMN_EMAIL_SIZE+1];
 
 } Row;
+
+
 
 
 #define ID_SIZE  size_of_attribute(Row,id)
@@ -36,9 +41,17 @@ typedef struct
 #define ROWS_PER_PAGE  (PAGE_SIZE / ROW_SIZE)
 #define TABLE_MAX_ROWS (ROWS_PER_PAGE * TABLE_MAX_PAGES)
 
+
+typedef struct 
+{
+    int file_descriptor;
+    uint32_t file_length;
+    void* pages[TABLE_MAX_PAGES];
+} Pager;
+
 typedef struct{
     uint32_t num_rows;
-    void* pages[TABLE_MAX_PAGES];
+    Pager pager;
 } Table;
 
 typedef struct{
@@ -83,6 +96,8 @@ void close_input_buffer(InputBuffer* inputBuffer){
     free(inputBuffer);
 }
 
+
+
 InputBuffer* get_input_buffer(){
 InputBuffer* inputBuffer = (InputBuffer*) malloc(sizeof(InputBuffer));
 inputBuffer->buffer=NULL;
@@ -91,8 +106,6 @@ inputBuffer->input_length=0;
 
 return inputBuffer;
 }
-
-
 
 void print_prompt(){
 
@@ -161,7 +174,6 @@ PrepareResult prepare_insert(InputBuffer* inputBuffer, Statement* statement){
 
 }
 
-
 PrepareResult prepare_statement(InputBuffer* inputBuffer , Statement* statement){
 
     if(strncmp(inputBuffer->buffer,"insert",6) == 0){
@@ -197,18 +209,19 @@ void deserialize_row(void* source, Row* destination){
     memcpy(&(destination->email),source + EMAIL_OFFSET,EMAIL_SIZE);
 }
 
+void* get_page(Pager pager, uint32_t page_num){
+    
+}
+
 void* row_slot(Table* table,uint32_t row_num){
     uint32_t page_num = row_num / ROWS_PER_PAGE;
-    void* page =  table->pages[page_num]; 
-
-    if(page==NULL){
-        //Allocating Memory only when we try to access page
-        page = table->pages[page_num] =malloc(PAGE_SIZE);
-    }
+    void* page = get_page(table->pager,page_num);
+    
     uint32_t row_offset = row_num % ROWS_PER_PAGE;
     uint32_t byte_offset = row_offset * ROW_SIZE;
     return page + byte_offset;
 }
+
 
 ExecuteResult execute_insert(Statement* statement, Table* table){
     if(table->num_rows >= TABLE_MAX_ROWS){
@@ -246,12 +259,33 @@ ExecuteResult execute_statement(Statement* statement,Table* table){
     }
 }
 
-Table* new_table(){
-    Table* table = (Table*) malloc(sizeof(Table));
-    table->num_rows =0;
-    for(uint32_t i=0; i<TABLE_MAX_PAGES;i++){
-        table->pages[i] = NULL;
+Pager* pager_open(const char* filename){
+    int fd = open(filename,
+            O_RDWR | O_CREAT, //Read write or Create a new file
+            S_IWUSR | S_IRUSR //User Write permission or User Read Permission
+    );
+
+    if(fd == -1){
+        printf("Unable to Open File.\n");
+        exit(EXIT_FAILURE);
     }
+
+    off_t file_size = lseek(fd,0,SEEK_END);
+
+    Pager* pager = malloc(sizeof(Pager));
+    pager->file_descriptor = fd;
+    pager->file_length = file_size;
+    for(int i =0; i<TABLE_MAX_PAGES;i++){
+        pager->pages[i] = NULL;
+    }
+
+    return pager;
+
+}
+
+Table* db_open(const char* filename){
+    Pager* pager = pager_open(filename);
+    Table* table = (Table*) malloc(sizeof(Table));
     return table;
 }
 
