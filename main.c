@@ -58,6 +58,10 @@ case EXECUTE_SUCCESS:
     printf("\nEXECUTED SUCCEFULLY.\n");fflush(stdout);
     break;
 
+case DUPLICATE_KEY:
+    printf("\n You cannot Use Same key for Two VAlues.\n");
+    break;
+    
 case EXECUTE_TABLE_FULL:
     printf("\nTABLE IS FULL\n");
     break;
