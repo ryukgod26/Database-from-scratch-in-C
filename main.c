@@ -3,6 +3,7 @@
 int main(char* argv , int argc){
 
 InputBuffer* input = get_input_buffer();
+Table* table = new_table();
 while(true){
 
 print_prompt();
@@ -25,13 +26,25 @@ switch (prepare_statement(input,&statement))
 case PREPARE_SUCCESS:
     
     break;
+case PREPARE_SYNTAX_ERROR:
+    printf("Syntax error. Could Not Parse the Statement.");
+    continue;
 
 case PREPARE_UNRECOGNISED_COMMAND:
     printf("Unrecognised Keyword at the start  %s \n",input->buffer);
     continue;
 }
 
-execute_statement(&statement);
+switch (execute_statement(&statement,table))
+{
+case EXECUTE_SUCCESS:
+    printf("EXECUTED SUCCEFULLY.");
+    break;
+
+case EXECUTE_TABLE_FULL:
+    printf("TABLE IS FULL");
+    break;
+}
 
 }
 
@@ -49,4 +62,3 @@ execute_statement(&statement);
 
 return 0;
 }
-
