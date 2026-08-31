@@ -25,9 +25,6 @@ typedef struct
 
 } Row;
 
-
-
-
 #define ID_SIZE  size_of_attribute(Row,id)
 #define USERNAME_SIZE  size_of_attribute(Row,username)
 #define EMAIL_SIZE  size_of_attribute(Row,email)
@@ -39,8 +36,61 @@ typedef struct
 #define ROW_SIZE (ID_SIZE + USERNAME_SIZE + EMAIL_SIZE)
 
 #define PAGE_SIZE 4096
-#define ROWS_PER_PAGE  (PAGE_SIZE / ROW_SIZE)
-#define TABLE_MAX_ROWS (ROWS_PER_PAGE * TABLE_MAX_PAGES)
+// #define ROWS_PER_PAGE  (PAGE_SIZE / ROW_SIZE)
+// #define TABLE_MAX_ROWS (ROWS_PER_PAGE * TABLE_MAX_PAGES)
+
+//Common Node Header Layout
+
+//size of a page
+const uint32_t NODE_TYPE_SIZE = sizeof(uint8_t);
+//offset of a node
+const uint32_t NODE_TYPE_OFFSET = 0;
+const uint32_t IS_ROOT_SIZE = sizeof(uint8_t);
+const uint32_t IS_ROOT_OFFSET = NODE_TYPE_SIZE;
+//size of the parent node will be used to find its siblings
+const uint32_t PARENT_POINTER_SIZE = sizeof(uint32_t);
+const uint32_t PARENT_POINTER_OFFSET = IS_ROOT_OFFSET + IS_ROOT_SIZE;
+const uint32_t COMMON_NODE_HEADER_SIZE = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
+
+//LEAF NODE HEADER LAYOUT
+
+const uint32_t LEAF_NODE_NUM_CELLS_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
+const uint32_t LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
+
+
+//LEAF NODE BODY LAYOUT
+
+const uint32_t LEAF_NODE_KEY_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_KEY_OFFSET = 0;
+const uint32_t LEAF_NODE_VALUE_SIZE = ROW_SIZE;
+const uint32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE ;
+const uint32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
+const uint32_t SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
+const uint32_t LEAF_NODE_MAX_CELLS = SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
+
+
+//Functions to access Leaf Nodes Fields
+uint32_t* leaf_node_num_cells(void* node){
+    return node + LEAF_NODE_NUM_CELLS_OFFSET;
+}
+
+void* leaf_node_cell(void* node, uint32_t cell_num){
+    return node + LEAF_NODE_HEADER_SIZE + cell_num * LEAF_NODE_CELL_SIZE;
+}
+
+uint32_t* leaf_node_key(void* node, uint32_t cell_num){
+    return leaf_node_cell(node,cell_num);
+}
+
+void* leaf_node_value(void* node, uint32_t cell_num){
+    return leaf_node_cell(node,cell_num) + LEAF_NODE_KEY_SIZE;
+}
+
+void intialize_leaf_node(void* node){
+    *leaf_node_num_cells(node) = 0;
+}
+
 
 
 typedef struct 
@@ -48,10 +98,11 @@ typedef struct
     int file_descriptor;
     uint32_t file_length;
     void* pages[TABLE_MAX_PAGES];
-} Pager;
+ } Pager;
 
 typedef struct{
-    uint32_t num_rows;
+    // uint32_t num_rows;
+    uint32_t root_page_num;
     Pager* pager;
 } Table;
 
@@ -84,6 +135,8 @@ typedef enum{
     EXECUTE_FAILURE,
     EXECUTE_TABLE_FULL
 } ExecuteResult;
+
+typedef enum { NodeLeaf , NodeInternal } NodeType;
 
 typedef struct{
 Table* table;
@@ -237,44 +290,47 @@ void deserialize_row(void* source, Row* destination){
 }
 
 void* get_page(Pager* pager, uint32_t page_num){
-    if(page_num > TABLE_MAX_PAGES){
-        printf("Requested is Out of Bounds.");
-        exit(EXIT_FAILURE);
-    }
 
-    if(pager->pages[page_num] == NULL){
-        //Page is not available in cache. Loading Page from the Disk.
-        void* page = malloc(PAGE_SIZE);
-        uint32_t num_pages = pager->file_length / PAGE_SIZE;
-        pager->pages[page_num] = page;
 
-        //checking if a page is partially stored in the database. 
-        if(pager->file_length % PAGE_SIZE)
-        {
-        //Incrementing the number of pages to include the Partial Page.
-        num_pages += 1;
-        }
+    pager->pages[page_num] = page;
+    // if(page_num > TABLE_MAX_PAGES){
+    //     printf("Requested is Out of Bounds.");
+    //     exit(EXIT_FAILURE);
+    // }
+
+    // if(pager->pages[page_num] == NULL){
+    //     //Page is not available in cache. Loading Page from the Disk.
+    //     void* page = malloc(PAGE_SIZE);
+    //     uint32_t num_pages = pager->file_length / PAGE_SIZE;
+    //     pager->pages[page_num] = page;
+
+    //     //checking if a page is partially stored in the database. 
+    //     if(pager->file_length % PAGE_SIZE)
+    //     {
+    //     //Incrementing the number of pages to include the Partial Page.
+    //     num_pages += 1;
+    //     }
         
-        //checking if requested page is in the total pages
-        if(page_num <= num_pages){
-            //Loading the Page into Memory
-            lseek(pager->file_descriptor,page_num * PAGE_SIZE,SEEK_SET);
-            ssize_t bytes_read = read(pager->file_descriptor,page,PAGE_SIZE);
-            if(bytes_read == -1){
-                printf("Error While Reading FIle %d \n",errno);
-                exit(EXIT_FAILURE);
-            }
+    //     //checking if requested page is in the total pages
+    //     if(page_num <= num_pages){
+    //         //Loading the Page into Memory
+    //         lseek(pager->file_descriptor,page_num * PAGE_SIZE,SEEK_SET);
+    //         ssize_t bytes_read = read(pager->file_descriptor,page,PAGE_SIZE);
+    //         if(bytes_read == -1){
+    //             printf("Error While Reading FIle %d \n",errno);
+    //             exit(EXIT_FAILURE);
+    //         }
 
-        }
+    //     }
 
-    }
+    // }
 
-    return pager->pages[page_num];
+    // return pager->pages[page_num];
     
 }
 
 //Writing the data into the disk
-void pager_flush(Pager* pager,uint32_t page_num, uint32_t page_size){
+void pager_flush(Pager* pager,uint32_t page_num){
     if (pager->pages[page_num] == NULL)
     {
         printf("Tried to flush NULL Page.\n");
@@ -288,7 +344,7 @@ void pager_flush(Pager* pager,uint32_t page_num, uint32_t page_size){
         exit(EXIT_FAILURE);
     }
 
-    ssize_t bytes_written = write(pager->file_descriptor,pager->pages[page_num],page_size);
+    ssize_t bytes_written = write(pager->file_descriptor,pager->pages[page_num],PAGE_SIZE);
 
     if(bytes_written == -1){
         printf("Error While Writing %d \n",errno);
@@ -299,27 +355,26 @@ void pager_flush(Pager* pager,uint32_t page_num, uint32_t page_size){
 
 void db_close(Table* table){
     Pager* pager = table->pager;
-    uint32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
 
-    for(uint32_t i=0; i< num_full_pages; i++){
+    for(uint32_t i=0; i< pager->pages; i++){
         if(pager->pages[i] == NULL){
             continue;
         }
-        pager_flush(pager,i,PAGE_SIZE);
+        pager_flush(pager,i);
         free(pager->pages[i]);
         pager->pages[i] =NULL;
     }
 
-    //If there is a Partial Page. I am ggoing to remove it later when i switch to B-Tree.
-    uint32_t partial_page = table->num_rows % ROWS_PER_PAGE;
-    if(partial_page > 0){
-        uint32_t page_num = num_full_pages;
-        if(pager->pages[page_num] != NULL){
-            pager_flush(pager,page_num,partial_page * ROW_SIZE);
-            free(pager->pages[page_num]);
-            pager->pages[page_num] = NULL;
-        }
-    }
+    // //If there is a Partial Page. I am ggoing to remove it later when i switch to B-Tree.
+    // uint32_t partial_page = table->num_rows % ROWS_PER_PAGE;
+    // if(partial_page > 0){
+    //     uint32_t page_num = num_full_pages;
+    //     if(pager->pages[page_num] != NULL){
+    //         pager_flush(pager,page_num,partial_page * ROW_SIZE);
+    //         free(pager->pages[page_num]);
+    //         pager->pages[page_num] = NULL;
+    //     }
+    // }
 
     int result = close(pager->file_descriptor);
     if(result == -1){
