@@ -55,7 +55,7 @@ case PREPARE_NEGATIVE_ID:
 switch (execute_statement(&statement,table))
 {
 case EXECUTE_SUCCESS:
-    printf("\nEXECUTED SUCCEFULLY.\n");fflush(stdout);
+    //printf("\nEXECUTED SUCCEFULLY.\n");fflush(stdout);
     break;
 
 case DUPLICATE_KEY:
