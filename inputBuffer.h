@@ -140,7 +140,8 @@ typedef enum { NodeLeaf , NodeInternal } NodeType;
 
 typedef struct{
 Table* table;
-uint32_t row_num;
+uint32_t page_num;
+uint32_t cell_num;
 bool end_of_table;
 } Cursor;
 
@@ -175,8 +176,14 @@ Cursor* table_start(Table* table){
 Cursor* cursor = malloc(sizeof(Cursor));
 
 cursor->table = table;
-cursor->row_num = 0;
-cursor->end_of_table = (table->num_rows == 0);
+cursor->page_num = table->root_page_num;
+cursor->cell_num = 0;
+
+void* root_node = get_page(table->pager,table->root_page_num;
+uint32_t num_cells = *leaf_node_num_cells(root_node);
+cursor->end_of_table = (num_cells==0);
+
+
 
 return cursor;
 
@@ -197,12 +204,23 @@ return cursor;
 
 void cursor_advance(Cursor* cursor){
 
-cursor->row_num += 1;
-if(cursor->row_num >= cursor->table->num_rows){
+//cursor->row_num += 1;
+//if(cursor->row_num >= cursor->table->num_rows){
+//cursor->end_of_table = true;
+//}
+
+uint32_t page_num = cursor->page_num;
+void* node = get_page(cursor->table->pager,page_num);
+cursor->cell_num +=1;
+
+if(cursor->cell_num >= (*leaf_node_num_cells(node))){
 cursor->end_of_table = true;
-}
 
 }
+
+
+}
+
 
 void read_input(InputBuffer* inputBuffer){
 
@@ -292,7 +310,12 @@ void deserialize_row(void* source, Row* destination){
 void* get_page(Pager* pager, uint32_t page_num){
 
 
-    pager->pages[page_num] = page;
+	if (page_num >= pager->num_pages){
+			pager->num_pages = page_num +1;
+			
+			}
+	return pager->pages[page_num];
+//    pager->pages[page_num] = page;
     // if(page_num > TABLE_MAX_PAGES){
     //     printf("Requested is Out of Bounds.");
     //     exit(EXIT_FAILURE);
@@ -399,13 +422,14 @@ void db_close(Table* table){
 }
 
 void* cursor_value(Cursor* cursor){
-    uint32_t row_num = cursor->row_num;
-    uint32_t page_num = row_num / ROWS_PER_PAGE;
+//    uint32_t row_num = cursor->row_num;
+  //  uint32_t page_num = row_num / ROWS_PER_PAGE;
+  uint32_t page_num = cursor->page_num;
+  
     void* page = get_page(cursor->table->pager,page_num);
-    
-    uint32_t row_offset = row_num % ROWS_PER_PAGE;
-    uint32_t byte_offset = row_offset * ROW_SIZE;
-    return page + byte_offset;
+  //  uint32_t row_offset = row_num % ROWS_PER_PAGE;
+    //uint32_t byte_offset = row_offset * ROW_SIZE;
+    return leaf_node_value(page,cursor->cell_num);
 }
 
 
@@ -484,6 +508,13 @@ Pager* pager_open(const char* filename){
     Pager* pager = malloc(sizeof(Pager));
     pager->file_descriptor = fd;
     pager->file_length = file_size;
+    pager->num_pages = (file_size/ PAGE_SIZE);
+
+    if( file_size % PAGE_SIZE != 0){
+    printf("DB File is not full of Pages. Corrupt File.\n");
+    exit(EXIT_FAILURE);
+    }
+
     for(int i =0; i<TABLE_MAX_PAGES;i++){
         pager->pages[i] = NULL;
     }
@@ -494,11 +525,19 @@ Pager* pager_open(const char* filename){
 
 Table* db_open(const char* filename){
     Pager* pager = pager_open(filename);
-    uint32_t num_rows = pager->file_length / ROW_SIZE;
+//    uint32_t num_rows = pager->file_length / ROW_SIZE;
+
     Table* table = malloc(sizeof(Table));
 
     table->pager = pager;
-    table->num_rows = num_rows;
+//    table->num_rows = num_rows;
+	table->root_page_num = 0;
+	
+	if(pager->num_pages == 0){
+	//It means this is a new database file. So we intialize the db page 0 as leaf node.
+	void* root_node = get_page(pager,0);
+	intialize_leaf_node(root_node);
+	}
     return table;
 }
 
@@ -508,3 +547,22 @@ Table* db_open(const char* filename){
 //     }
 //     free(table);
 // }
+void leaf_node_insert(Cursor* cursor, uint32_t key, Row* value){
+void* page = get_page(cursor->table->pager,cursor->page_num);
+
+uint32_t num_cells = *(leaf_node_num_cells(node));
+if(num_cells >= LEAF_NODE_MAX_CELLS){
+printf("Leaf Node is Full. Need to Implement Splitting a Node.");
+exit(EXIT_FAILURE);
+}
+if(cursor->cell_num < num_cells){
+//Making Room for new Cell
+for(uint32_t i = num_cells; i > cursor->cell_num; i--){
+memcpy(leaf_node_cell(node,i),leaf_node_cell(node,i-1),LEAF_NODE_CELL_SIZE);
+}
+}
+
+*(leaf_node_num_cells(node)) += 1;
+*(leaf_node_key(node,cursor->cell_num)) ,= key;
+serialize_row(value,leaf_node_value(node,cursor->cell_num));
+}
