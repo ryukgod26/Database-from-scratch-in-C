@@ -51,7 +51,7 @@ typedef struct
 
 typedef struct{
     uint32_t num_rows;
-    Pager pager;
+    Pager* pager;
 } Table;
 
 typedef struct{
@@ -113,16 +113,7 @@ printf("db > ");
 
 }
 
-MetaCommandResult do_meta_command(InputBuffer* inputBuffer){
-    if(strcmp(inputBuffer->buffer,".exit") == 0){
-        printf("Existing The Database Shell.\n");
-        close_input_buffer(inputBuffer);
-        exit(EXIT_SUCCESS);
-    }
-    else{
-        return META_COMMAND_UNRECOGNISED_COMMAND;
-    }
-}
+
 
 void read_input(InputBuffer* inputBuffer){
 
@@ -199,7 +190,7 @@ void serialize_row(Row* source, void* destination){
     //copying the value of id at the location dest+IDOffset of id size to store th buffer in memoery as a struct
     memcpy(destination + ID_OFFSET, &(source->id),ID_SIZE);
     memcpy(destination + USERNAME_OFFSET,&(source->username),USERNAME_SIZE);
-    memcpy(destination + EMAIL_OFFSET,&(source->email),EMAIL_OFFSET);
+    memcpy(destination + EMAIL_OFFSET,&(source->email),EMAIL_SIZE);
 }
 
 void deserialize_row(void* source, Row* destination){
@@ -209,8 +200,111 @@ void deserialize_row(void* source, Row* destination){
     memcpy(&(destination->email),source + EMAIL_OFFSET,EMAIL_SIZE);
 }
 
-void* get_page(Pager pager, uint32_t page_num){
+void* get_page(Pager* pager, uint32_t page_num){
+    if(page_num > TABLE_MAX_PAGES){
+        printf("Requested is Out of Bounds.");
+        exit(EXIT_FAILURE);
+    }
+
+    if(pager->pages[page_num] == NULL){
+        //Page is not available in cache. Loading Page from the Disk.
+        void* page = malloc(PAGE_SIZE);
+        uint32_t num_pages = pager->file_length / PAGE_SIZE;
+        pager->pages[page_num] = page;
+
+        //checking if a page is partially stored in the database. 
+        if(pager->file_length % PAGE_SIZE)
+        {
+        //Incrementing the number of pages to include the Partial Page.
+        num_pages += 1;
+        }
+        
+        //checking if requested page is in the total pages
+        if(page_num <= num_pages){
+            //Loading the Page into Memory
+            lseek(pager->file_descriptor,page_num * PAGE_SIZE,SEEK_SET);
+            ssize_t bytes_read = read(pager->file_descriptor,page,PAGE_SIZE);
+            if(bytes_read == -1){
+                printf("Error While Reading FIle %d \n",errno);
+                exit(EXIT_FAILURE);
+            }
+
+        }
+
+    }
+
+    return pager->pages[page_num];
     
+}
+
+//Writing the data into the disk
+void pager_flush(Pager* pager,uint32_t page_num, uint32_t page_size){
+    if (pager->pages[page_num] == NULL)
+    {
+        printf("Tried to flush NULL Page.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    off_t offset = lseek(pager->file_descriptor,page_num * PAGE_SIZE,SEEK_SET);
+
+    if(offset == -1){
+        printf("Error Seeking :d \n",errno);
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_written = write(pager->file_descriptor,pager->pages[page_num],page_size);
+
+    if(bytes_written == -1){
+        printf("Error While Writing %d \n",errno);
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+void db_close(Table* table){
+    Pager* pager = table->pager;
+    uint32_t num_full_pages = table->num_rows / ROWS_PER_PAGE;
+
+    for(uint32_t i=0; i< num_full_pages; i++){
+        if(pager->pages[i] == NULL){
+            continue;
+        }
+        pager_flush(pager,i,PAGE_SIZE);
+        free(pager->pages[i]);
+        pager->pages[i] =NULL;
+    }
+
+    //If there is a Partial Page. I am ggoing to remove it later when i switch to B-Tree.
+    uint32_t partial_page = table->num_rows % ROWS_PER_PAGE;
+    if(partial_page > 0){
+        uint32_t page_num = num_full_pages;
+        if(pager->pages[page_num] != NULL){
+            pager_flush(pager,page_num,partial_page * ROW_SIZE);
+            free(pager->pages[page_num]);
+            pager->pages[page_num] = NULL;
+        }
+    }
+
+    int result = close(pager->file_descriptor);
+    if(result == -1){
+        printf("Error Closing Database File.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    //Freeing unused or partial pages.
+    for(uint32_t i =0; i<TABLE_MAX_PAGES;i++){
+        void* page = pager->pages[i];
+        if(page){
+            free(page);
+            pager->pages[i] =NULL;
+        }
+    }
+
+    free(pager);
+    free(table);
+
+    printf("Database Closed Successfully.");
+
 }
 
 void* row_slot(Table* table,uint32_t row_num){
@@ -235,6 +329,17 @@ ExecuteResult execute_insert(Statement* statement, Table* table){
     return EXECUTE_SUCCESS;
 }
 
+MetaCommandResult do_meta_command(InputBuffer* inputBuffer,Table* table){
+    if(strcmp(inputBuffer->buffer,".exit") == 0){
+        printf("Existing The Database Shell.\n");
+        db_close(table);
+        close_input_buffer(inputBuffer);
+        exit(EXIT_SUCCESS);
+    }
+    else{
+        return META_COMMAND_UNRECOGNISED_COMMAND;
+    }
+}
 
 ExecuteResult execute_select(Statement* statement, Table* table){
     Row row;
@@ -285,13 +390,17 @@ Pager* pager_open(const char* filename){
 
 Table* db_open(const char* filename){
     Pager* pager = pager_open(filename);
-    Table* table = (Table*) malloc(sizeof(Table));
+    uint32_t num_rows = pager->file_length / ROW_SIZE;
+    Table* table = malloc(sizeof(Table));
+
+    table->pager = pager;
+    table->num_rows = num_rows;
     return table;
 }
 
-void free_table(Table* table){
-    for(int i =0; table->pages[i]; i++){
-        free(table->pages[i]);
-    }
-    free(table);
-}
+// void free_table(Table* table){
+//     for(int i =0; table->pages[i]; i++){
+//         free(table->pages[i]);
+//     }
+//     free(table);
+// }

@@ -1,16 +1,24 @@
 #include "inputBuffer.h"
 
-int main(char* argv , int argc){
+int main(int argc, char* argv[]){
+
+if(argc < 2){
+    printf("Please Provide a database file name.\n");
+    printf("Format to run the Program is : ./a.exe database_file_name \n");
+    exit(EXIT_FAILURE);
+}
+
+char* filename = argv[1];
 
 InputBuffer* input = get_input_buffer();
-Table* table = new_table();
+Table* table = db_open(filename);
 while(true){
 
 print_prompt();
 read_input(input);
 
 if(input->buffer[0] == '.'){
-    switch(do_meta_command(input)){
+    switch(do_meta_command(input,table)){
         case META_COMMAND_SUCCESS:
             continue;
         case META_COMMAND_UNRECOGNISED_COMMAND:
@@ -71,4 +79,3 @@ case EXECUTE_TABLE_FULL:
 
 return 0;
 }
-
