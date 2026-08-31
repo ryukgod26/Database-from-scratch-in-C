@@ -58,7 +58,7 @@ typedef struct
 #define LEAF_NODE_NUM_CELLS_OFFSET  COMMON_NODE_HEADER_SIZE
 #define LEAF_MODE_NEXT_LEAF_SIZE sizeof(uint32_t)
 #define LEAF_NODE_NEXT_LEAF_OFFSET (LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE)
-#define LEAF_NODE_HEADER_SIZE  (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE)
+#define LEAF_NODE_HEADER_SIZE  (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_MODE_NEXT_LEAF_SIZE)
 
 
 //LEAF NODE BODY LAYOUT
@@ -78,7 +78,7 @@ typedef struct
 #define INTERNAL_NODE_NUM_KEYS_OFFSET COMMON_NODE_HEADER_SIZE
 #define INTERNAL_NODE_RIGHT_CHILD_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_RIGHT_CHILD_OFFSET (INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE)
-#define INTERNAL_NODE_HEADER_SIZE (COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_RIGHT_CHILD_SIZE)
+#define INTERNAL_NODE_HEADER_SIZE (COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE + INTERNAL_NODE_RIGHT_CHILD_SIZE)
 
 //Internal Node Body Layout
 #define INTERNAL_NODE_KEY_SIZE sizeof(uint32_t)
@@ -189,7 +189,7 @@ uint32_t* leaf_node_key(void* node, uint32_t cell_num){
     return leaf_node_cell(node,cell_num);
 }
 
-void* leaf_node_value(void* node, uint32_t cell_numf){
+void* leaf_node_value(void* node, uint32_t cell_num){
     return leaf_node_cell(node,cell_num) + LEAF_NODE_KEY_SIZE;
 }
 
@@ -359,18 +359,6 @@ return cursor;
 }
 */
 
-Cursor* table_start(Table* table){
-Cursor* cursor = table_find(table,0);
-
-void* node = get_page(table->pager,cursor->page_num);
-uint32_t num_cells = *leaf_node_num_cells(node);
-cursor->end_of_table = (num_cells == 0);
-
-return cursor;
-
-}
-
-
 Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key){
     void* node = get_page(table->pager,page_num);
     uint32_t num_cells = *(leaf_node_num_cells(node));
@@ -400,8 +388,6 @@ Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key){
     cursor ->cell_num = min_index;
     return cursor;
 }
-
-
 
 
 Cursor* internal_node_find(Table* table,uint32_t page_num,uint32_t key){
@@ -436,6 +422,7 @@ switch(get_node_type(child)){
 
 }
 
+
 //return the Position of a given Key.
 //If the Key is not Present then return the location where key should be inserted
 Cursor* table_find(Table* table,uint32_t key){
@@ -452,6 +439,25 @@ Cursor* table_find(Table* table,uint32_t key){
     }
 
 }
+
+
+Cursor* table_start(Table* table){
+Cursor* cursor = table_find(table,0);
+
+void* node = get_page(table->pager,cursor->page_num);
+uint32_t num_cells = *leaf_node_num_cells(node);
+cursor->end_of_table = (num_cells == 0);
+
+return cursor;
+
+}
+
+
+
+
+
+
+
 
 // Cursor* table_end(Table* table){
 // Cursor* cursor = malloc(sizeof(Cursor));
@@ -721,7 +727,7 @@ intialize_leaf_node(new_node);
     void* destination = leaf_node_cell(destination_node,index_within_node);
 
     if(i == cursor->cell_num){
-        serialize_row(value,destination);
+        serialize_row(value,leaf_node_value(destination,index_within_node));
     }
     else if(i > cursor->cell_num){
         memcpy(destination,leaf_node_cell(old_node,i-1),LEAF_NODE_CELL_SIZE);
